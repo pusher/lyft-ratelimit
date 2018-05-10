@@ -203,7 +203,7 @@ func TestBadYaml(t *testing.T) {
 				loadFile("bad_yaml.yaml"),
 				stats.NewStore(stats.NewNullSink(), false))
 		},
-		"bad_yaml.yaml: error loading config file: yaml: line 1: found unexpected end of stream")
+		"bad_yaml.yaml: error loading config file: yaml: line 2: found unexpected end of stream")
 }
 
 func TestMisspelledKey(t *testing.T) {
