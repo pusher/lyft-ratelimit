@@ -38,9 +38,9 @@ func testRedis(usePerSecondRedis bool) func(*testing.T) {
 		statsStore := stats.NewStore(stats.NewNullSink(), false)
 		var cache redis.RateLimitCache
 		if usePerSecondRedis {
-			cache = redis.NewRateLimitCacheImpl(pool, perSecondPool, timeSource, rand.New(rand.NewSource(1)), 0, statsStore.Scope().Scope("cache"))
+			cache = redis.NewRateLimitCacheImpl(pool, perSecondPool, timeSource, rand.New(rand.NewSource(1)), 0, statsStore.Scope("cache"))
 		} else {
-			cache = redis.NewRateLimitCacheImpl(pool, nil, timeSource, rand.New(rand.NewSource(1)), 0, statsStore.Scope().Scope("cache"))
+			cache = redis.NewRateLimitCacheImpl(pool, nil, timeSource, rand.New(rand.NewSource(1)), 0, statsStore.Scope("cache"))
 		}
 
 		if usePerSecondRedis {
@@ -162,7 +162,7 @@ func TestNearLimit(t *testing.T) {
 	connection := mock_redis.NewMockConnection(controller)
 	response := mock_redis.NewMockResponse(controller)
 	statsStore := stats.NewStore(stats.NewNullSink(), false)
-	cache := redis.NewRateLimitCacheImpl(pool, nil, timeSource, rand.New(rand.NewSource(1)), 0, statsStore.Scope().Scope("cache"))
+	cache := redis.NewRateLimitCacheImpl(pool, nil, timeSource, rand.New(rand.NewSource(1)), 0, statsStore.Scope("cache"))
 
 	// Test Near Limit Stats. Under Near Limit Ratio
 	pool.EXPECT().Get().Return(connection)
@@ -360,7 +360,7 @@ func TestRedisWithJitter(t *testing.T) {
 	response := mock_redis.NewMockResponse(controller)
 	jitterSource := mock_redis.NewMockJitterRandSource(controller)
 	statsStore := stats.NewStore(stats.NewNullSink(), false)
-	cache := redis.NewRateLimitCacheImpl(pool, nil, timeSource, rand.New(jitterSource), 3600, statsStore.Scope().Scope("cache"))
+	cache := redis.NewRateLimitCacheImpl(pool, nil, timeSource, rand.New(jitterSource), 3600, statsStore.Scope("cache"))
 
 	pool.EXPECT().Get().Return(connection)
 	timeSource.EXPECT().UnixNow().Return(int64(1234))
