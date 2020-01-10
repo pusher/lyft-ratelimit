@@ -143,6 +143,18 @@ func newServer(name string, opts ...settings.Option) *server {
 		func(writer http.ResponseWriter, request *http.Request) {
 			pprof.Index(writer, request)
 		})
+	ret.AddDebugHttpEndpoint(
+		"/debug/pprof/profile",
+		"cpu profile",
+		func(writer http.ResponseWriter, request *http.Request) {
+			pprof.Profile(writer, request)
+		})
+	ret.AddDebugHttpEndpoint(
+		"/debug/pprof/trace",
+		"a trace of execution of the current program",
+		func(writer http.ResponseWriter, request *http.Request) {
+			pprof.Trace(writer, request)
+		})
 
 	// setup stats endpoint
 	ret.AddDebugHttpEndpoint(
