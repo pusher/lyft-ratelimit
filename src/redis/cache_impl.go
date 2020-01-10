@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	stats "github.com/lyft/gostats"
 	pb_struct "github.com/lyft/ratelimit/proto/envoy/api/v2/ratelimit"
 	pb "github.com/lyft/ratelimit/proto/envoy/service/ratelimit/v2"
 	"github.com/lyft/ratelimit/src/assert"
@@ -28,6 +29,7 @@ type rateLimitCacheImpl struct {
 	expirationJitterMaxSeconds int64
 	// bytes.Buffer pool used to efficiently generate cache keys.
 	bufferPool sync.Pool
+	latency    stats.Timer
 }
 
 // Convert a rate limit into a time divider.
@@ -152,6 +154,7 @@ func (this *rateLimitCacheImpl) DoLimit(
 	}
 
 	// Now, actually setup the pipeline, skipping empty cache keys.
+	timespan := this.latency.AllocateSpan()
 	for i, cacheKey := range cacheKeys {
 		if cacheKey.key == "" {
 			continue
@@ -244,11 +247,12 @@ func (this *rateLimitCacheImpl) DoLimit(
 			}
 		}
 	}
+	timespan.Complete()
 
 	return responseDescriptorStatuses
 }
 
-func NewRateLimitCacheImpl(pool Pool, perSecondPool Pool, timeSource TimeSource, jitterRand *rand.Rand, expirationJitterMaxSeconds int64) RateLimitCache {
+func NewRateLimitCacheImpl(pool Pool, perSecondPool Pool, timeSource TimeSource, jitterRand *rand.Rand, expirationJitterMaxSeconds int64, scope stats.Scope) RateLimitCache {
 	return &rateLimitCacheImpl{
 		pool:                       pool,
 		perSecondPool:              perSecondPool,
@@ -256,6 +260,7 @@ func NewRateLimitCacheImpl(pool Pool, perSecondPool Pool, timeSource TimeSource,
 		jitterRand:                 jitterRand,
 		expirationJitterMaxSeconds: expirationJitterMaxSeconds,
 		bufferPool:                 newBufferPool(),
+		latency:                    scope.NewTimer("latency"),
 	}
 }
 
