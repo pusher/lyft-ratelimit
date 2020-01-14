@@ -11,6 +11,7 @@ import (
 	"github.com/coocood/freecache"
 	pb_struct "github.com/envoyproxy/go-control-plane/envoy/api/v2/ratelimit"
 	pb "github.com/envoyproxy/go-control-plane/envoy/service/ratelimit/v2"
+	stats "github.com/lyft/gostats"
 	"github.com/lyft/ratelimit/src/assert"
 	"github.com/lyft/ratelimit/src/config"
 	logger "github.com/sirupsen/logrus"
@@ -30,6 +31,7 @@ type rateLimitCacheImpl struct {
 	// bytes.Buffer pool used to efficiently generate cache keys.
 	bufferPool sync.Pool
 	localCache *freecache.Cache
+	latency    stats.Timer
 }
 
 // Convert a rate limit into a time divider.
@@ -156,6 +158,7 @@ func (this *rateLimitCacheImpl) DoLimit(
 	isOverLimitWithLocalCache := make([]bool, len(request.Descriptors))
 
 	// Now, actually setup the pipeline, skipping empty cache keys.
+	timespan := this.latency.AllocateSpan()
 	for i, cacheKey := range cacheKeys {
 		if cacheKey.key == "" {
 			continue
@@ -284,11 +287,12 @@ func (this *rateLimitCacheImpl) DoLimit(
 			}
 		}
 	}
+	timespan.Complete()
 
 	return responseDescriptorStatuses
 }
 
-func NewRateLimitCacheImpl(pool Pool, perSecondPool Pool, timeSource TimeSource, jitterRand *rand.Rand, expirationJitterMaxSeconds int64, localCache *freecache.Cache) RateLimitCache {
+func NewRateLimitCacheImpl(pool Pool, perSecondPool Pool, timeSource TimeSource, jitterRand *rand.Rand, expirationJitterMaxSeconds int64, localCache *freecache.Cache, scope stats.Scope) RateLimitCache {
 	return &rateLimitCacheImpl{
 		pool:                       pool,
 		perSecondPool:              perSecondPool,
@@ -297,6 +301,7 @@ func NewRateLimitCacheImpl(pool Pool, perSecondPool Pool, timeSource TimeSource,
 		expirationJitterMaxSeconds: expirationJitterMaxSeconds,
 		bufferPool:                 newBufferPool(),
 		localCache:                 localCache,
+		latency:                    scope.NewTimer("latency"),
 	}
 }
 

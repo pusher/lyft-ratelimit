@@ -66,11 +66,11 @@ compile:
 
 .PHONY: tests_unit
 tests_unit: compile
-	go test -race ./...
+	go test ./...
 
 .PHONY: tests
 tests: compile
-	go test -race -tags=integration ./...
+	go test -tags=integration ./...
 
 .PHONY: docker
 docker: tests
