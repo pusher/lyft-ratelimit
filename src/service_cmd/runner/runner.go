@@ -64,7 +64,9 @@ func (runner *Runner) Run() {
 			redis.NewTimeSourceImpl(),
 			rand.New(redis.NewLockedSource(time.Now().Unix())),
 			s.ExpirationJitterMaxSeconds,
-			localCache),
+			localCache,
+			srv.Scope().Scope("cache"),
+		),
 		config.NewRateLimitConfigLoaderImpl(),
 		srv.Scope().Scope("service"))
 
