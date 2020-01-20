@@ -1,6 +1,8 @@
 package redis
 
 import (
+	"time"
+
 	"github.com/lyft/gostats"
 	"github.com/lyft/ratelimit/src/assert"
 	"github.com/mediocregopher/radix.v2/pool"
@@ -64,9 +66,13 @@ func (this *poolImpl) Put(c Connection) {
 	}
 }
 
-func NewPoolImpl(scope stats.Scope, socketType string, url string, poolSize int) Pool {
+func NewPoolImpl(scope stats.Scope, socketType string, url string, poolSize int, overflowPoolSize int, overflowDrainPeriod time.Duration) Pool {
 	logger.Warnf("connecting to redis on %s %s with pool size %d", socketType, url, poolSize)
-	pool, err := pool.New(socketType, url, poolSize)
+	var opts []pool.Opt
+	if overflowPoolSize > 0 {
+		opts = append(opts, pool.OnFullBuffer(overflowPoolSize, overflowDrainPeriod))
+	}
+	pool, err := pool.NewCustom(socketType, url, poolSize, redis.Dial, opts...)
 	checkError(err)
 	return &poolImpl{
 		pool:  pool,
