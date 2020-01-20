@@ -4,6 +4,8 @@ import (
 	"crypto/tls"
 	"net"
 
+	"time"
+
 	stats "github.com/lyft/gostats"
 	"github.com/lyft/ratelimit/src/assert"
 	"github.com/mediocregopher/radix.v2/pool"
@@ -67,7 +69,7 @@ func (this *poolImpl) Put(c Connection) {
 	}
 }
 
-func NewPoolImpl(scope stats.Scope, useTls bool, auth string, url string, poolSize int) Pool {
+func NewPoolImpl(scope stats.Scope, useTls bool, auth string, url string, poolSize int, overflowPoolSize int, overflowDrainPeriod time.Duration) Pool {
 	logger.Warnf("connecting to redis on %s with pool size %d", url, poolSize)
 	df := func(network, addr string) (*redis.Client, error) {
 		var conn net.Conn
@@ -94,8 +96,15 @@ func NewPoolImpl(scope stats.Scope, useTls bool, auth string, url string, poolSi
 		}
 		return client, nil
 	}
-	pool, err := pool.NewCustom("tcp", url, poolSize, df)
+
+	var opts []pool.Opt
+	if overflowPoolSize > 0 {
+		opts = append(opts, pool.OnFullBuffer(overflowPoolSize, overflowDrainPeriod))
+	}
+
+	pool, err := pool.NewCustom("tcp", url, poolSize, df, opts...)
 	checkError(err)
+
 	return &poolImpl{
 		pool:  pool,
 		stats: newPoolStats(scope)}
