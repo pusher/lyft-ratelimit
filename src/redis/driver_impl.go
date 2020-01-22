@@ -69,7 +69,7 @@ func (this *poolImpl) Put(c Connection) {
 	}
 }
 
-func NewPoolImpl(scope stats.Scope, useTls bool, auth string, url string, poolSize int, overflowPoolSize int, overflowDrainPeriod time.Duration) Pool {
+func NewPoolImpl(scope stats.Scope, useTls bool, auth string, url string, poolSize int, overflowPoolSize int, overflowDrainPeriod time.Duration, maxNewConnPerSecond int, getTimeout time.Duration) Pool {
 	logger.Warnf("connecting to redis on %s with pool size %d", url, poolSize)
 	df := func(network, addr string) (*redis.Client, error) {
 		var conn net.Conn
@@ -100,6 +100,12 @@ func NewPoolImpl(scope stats.Scope, useTls bool, auth string, url string, poolSi
 	var opts []pool.Opt
 	if overflowPoolSize > 0 {
 		opts = append(opts, pool.OnFullBuffer(overflowPoolSize, overflowDrainPeriod))
+	}
+	if getTimeout > 0 {
+		opts = append(opts, pool.GetTimeout(getTimeout))
+	}
+	if maxNewConnPerSecond > 0 {
+		opts = append(opts, pool.CreateLimit(0, time.Second/time.Duration(maxNewConnPerSecond)))
 	}
 
 	pool, err := pool.NewCustom("tcp", url, poolSize, df, opts...)

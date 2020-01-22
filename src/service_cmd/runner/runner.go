@@ -51,10 +51,10 @@ func (runner *Runner) Run() {
 
 	var perSecondPool redis.Pool
 	if s.RedisPerSecond {
-		perSecondPool = redis.NewPoolImpl(srv.Scope().Scope("redis_per_second_pool"), s.RedisPerSecondTls, s.RedisPerSecondAuth, s.RedisPerSecondUrl, s.RedisPerSecondPoolSize, s.RedisPoolOverflowSize, s.RedisPoolOverflowDrainPeriod)
+		perSecondPool = redis.NewPoolImpl(srv.Scope().Scope("redis_per_second_pool"), s.RedisPerSecondTls, s.RedisPerSecondAuth, s.RedisPerSecondUrl, s.RedisPerSecondPoolSize, s.RedisPoolOverflowSize, s.RedisPoolOverflowDrainPeriod, s.RedisPoolMaxNewConnPerSecond, s.RedisPoolGetTimeout)
 	}
 	var otherPool redis.Pool
-	otherPool = redis.NewPoolImpl(srv.Scope().Scope("redis_pool"), s.RedisTls, s.RedisAuth, s.RedisUrl, s.RedisPoolSize, s.RedisPoolOverflowSize, s.RedisPoolOverflowDrainPeriod)
+	otherPool = redis.NewPoolImpl(srv.Scope().Scope("redis_pool"), s.RedisTls, s.RedisAuth, s.RedisUrl, s.RedisPoolSize, s.RedisPoolOverflowSize, s.RedisPoolOverflowDrainPeriod, s.RedisPoolMaxNewConnPerSecond, s.RedisPoolGetTimeout)
 
 	service := ratelimit.NewService(
 		srv.Runtime(),

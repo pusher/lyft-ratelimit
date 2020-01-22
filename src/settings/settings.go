@@ -26,6 +26,8 @@ type Settings struct {
 	RedisPoolSize                int           `envconfig:"REDIS_POOL_SIZE" default:"10"`
 	RedisPoolOverflowSize        int           `envconfig:"REDIS_POOL_SIZE_OVERFLOW_SIZE" default:"10"`
 	RedisPoolOverflowDrainPeriod time.Duration `envconfig:"REDIS_POOL_SIZE_OVERFLOW_DRAIN_PERIOD" default:"5s"`
+	RedisPoolMaxNewConnPerSecond int           `envconfig:"REDIS_POOL_MAX_NEW_CONN_PER_SECOND" default:"1"`
+	RedisPoolGetTimeout          time.Duration `envconfig:"REDIS_POOL_GET_TIMEOUT" default:"200ms"`
 	RedisAuth                    string        `envconfig:"REDIS_AUTH" default:""`
 	RedisTls                     bool          `envconfig:"REDIS_TLS" default:"false"`
 	RedisPerSecond               bool          `envconfig:"REDIS_PERSECOND" default:"false"`
