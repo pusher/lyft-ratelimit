@@ -107,16 +107,18 @@ type cacheKey struct {
 	perSecond bool
 }
 
-func pipelineAppend(conn Connection, key string, hitsAddend uint32, expirationSeconds int64) {
-	conn.PipeAppend("INCRBY", key, hitsAddend)
-	conn.PipeAppend("EXPIRE", key, expirationSeconds)
-}
+func pipelineAppend(conn Connection, key string, hitsAddend uint32, expirationSeconds int64) (uint32, error) {
+	ret, err := conn.PipeAppend("INCRBY", key, strconv.Itoa(int(hitsAddend)))
+	if err != nil {
+		return 0, err
+	}
 
-func pipelineFetch(conn Connection) uint32 {
-	ret := uint32(conn.PipeResponse().Int())
-	// Pop off EXPIRE response and check for error.
-	conn.PipeResponse()
-	return ret
+	_, err = conn.PipeAppend("EXPIRE", key, strconv.Itoa(int(expirationSeconds)))
+	if err != nil {
+		return 0, err
+	}
+
+	return ret.Int(), nil
 }
 
 func (this *rateLimitCacheImpl) DoLimit(
@@ -126,16 +128,12 @@ func (this *rateLimitCacheImpl) DoLimit(
 
 	logger.Debugf("starting cache lookup")
 
-	conn := this.pool.Get()
-	defer this.pool.Put(conn)
+	// Lazily initialise connections to avoid acquiring when request only hit the in-memory cache
+	var conn Connection = nil
 
 	// Optional connection for per second limits. If the cache has a perSecondPool setup,
 	// then use a connection from the pool for per second limits.
 	var perSecondConn Connection = nil
-	if this.perSecondPool != nil {
-		perSecondConn = this.perSecondPool.Get()
-		defer this.perSecondPool.Put(perSecondConn)
-	}
 
 	// request.HitsAddend could be 0 (default value) if not specified by the caller in the Ratelimit request.
 	hitsAddend := max(1, request.HitsAddend)
@@ -156,6 +154,8 @@ func (this *rateLimitCacheImpl) DoLimit(
 	}
 
 	isOverLimitWithLocalCache := make([]bool, len(request.Descriptors))
+
+	var limitAfterIncrease uint32
 
 	// Now, actually setup the pipeline, skipping empty cache keys.
 	timespan := this.latency.AllocateSpan()
@@ -182,10 +182,24 @@ func (this *rateLimitCacheImpl) DoLimit(
 		}
 
 		// Use the perSecondConn if it is not nil and the cacheKey represents a per second Limit.
-		if perSecondConn != nil && cacheKey.perSecond {
-			pipelineAppend(perSecondConn, cacheKey.key, hitsAddend, expirationSeconds)
+		if this.perSecondPool != nil && cacheKey.perSecond {
+			if perSecondConn == nil {
+				perSecondConn = this.perSecondPool.Get()
+				defer this.perSecondPool.Put(perSecondConn)
+			}
+
+			var err error
+			limitAfterIncrease, err = pipelineAppend(perSecondConn, cacheKey.key, hitsAddend, expirationSeconds)
+			checkError(err)
 		} else {
-			pipelineAppend(conn, cacheKey.key, hitsAddend, expirationSeconds)
+			if conn == nil {
+				conn = this.pool.Get()
+				defer this.pool.Put(conn)
+			}
+
+			var err error
+			limitAfterIncrease, err = pipelineAppend(conn, cacheKey.key, hitsAddend, expirationSeconds)
+			checkError(err)
 		}
 	}
 	timespan.Complete()
@@ -214,14 +228,6 @@ func (this *rateLimitCacheImpl) DoLimit(
 			limits[i].Stats.OverLimit.Add(uint64(hitsAddend))
 			limits[i].Stats.OverLimitWithLocalCache.Add(uint64(hitsAddend))
 			continue
-		}
-
-		var limitAfterIncrease uint32
-		// Use the perSecondConn if it is not nil and the cacheKey represents a per second Limit.
-		if this.perSecondPool != nil && cacheKey.perSecond {
-			limitAfterIncrease = pipelineFetch(perSecondConn)
-		} else {
-			limitAfterIncrease = pipelineFetch(conn)
 		}
 
 		limitBeforeIncrease := limitAfterIncrease - hitsAddend

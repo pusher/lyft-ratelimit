@@ -23,17 +23,12 @@ type Connection interface {
 	// Append a command onto the pipeline queue.
 	// @param command supplies the command to append.
 	// @param args supplies the additional arguments.
-	PipeAppend(command string, args ...interface{})
-
-	// Execute the pipeline queue and wait for a response.
-	// @return a response object.
-	// Throws a RedisError if there was an error fetching the response.
-	PipeResponse() Response
+	PipeAppend(command string, args ...string) (Response, error)
 }
 
 // Interface for a redis response.
 type Response interface {
 	// @return the response as an integer.
 	// Throws a RedisError if the response is not convertable to an integer.
-	Int() int64
+	Int() uint32
 }

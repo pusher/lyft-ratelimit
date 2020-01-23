@@ -2,14 +2,11 @@ package redis
 
 import (
 	"crypto/tls"
-	"net"
 
 	"time"
 
 	stats "github.com/lyft/gostats"
-	"github.com/lyft/ratelimit/src/assert"
-	"github.com/mediocregopher/radix.v2/pool"
-	"github.com/mediocregopher/radix.v2/redis"
+	"github.com/mediocregopher/radix/v3"
 	logger "github.com/sirupsen/logrus"
 )
 
@@ -28,17 +25,16 @@ func newPoolStats(scope stats.Scope) poolStats {
 }
 
 type poolImpl struct {
-	pool  *pool.Pool
+	pool  *radix.Pool
 	stats poolStats
 }
 
 type connectionImpl struct {
-	client  *redis.Client
-	pending uint
+	pool *poolImpl
 }
 
 type responseImpl struct {
-	response *redis.Resp
+	response uint32
 }
 
 func checkError(err error) {
@@ -48,67 +44,67 @@ func checkError(err error) {
 }
 
 func (this *poolImpl) Get() Connection {
-	client, err := this.pool.Get()
-	checkError(err)
 	this.stats.connectionActive.Inc()
 	this.stats.connectionTotal.Inc()
-	return &connectionImpl{client, 0}
+	return &connectionImpl{this}
 }
 
 func (this *poolImpl) Put(c Connection) {
-	impl := c.(*connectionImpl)
 	this.stats.connectionActive.Dec()
-	if impl.pending == 0 {
-		this.pool.Put(impl.client)
-	} else {
-		// radix does not appear to track if we attempt to put a connection back with pipelined
-		// responses that have not been flushed. If we are in this state, just kill the connection
-		// and don't put it back in the pool.
-		impl.client.Close()
-		this.stats.connectionClose.Inc()
-	}
 }
 
 func NewPoolImpl(scope stats.Scope, useTls bool, auth string, url string, poolSize int, overflowPoolSize int, overflowDrainPeriod time.Duration, maxNewConnPerSecond int, getTimeout time.Duration) Pool {
 	logger.Warnf("connecting to redis on %s with pool size %d", url, poolSize)
-	df := func(network, addr string) (*redis.Client, error) {
-		var conn net.Conn
-		var err error
+	df := func(network, addr string) (radix.Conn, error) {
+		opts := []radix.DialOpt{
+			// Set a dial timeout on connect, read and write
+			radix.DialTimeout(1 * time.Second),
+		}
 		if useTls {
-			conn, err = tls.Dial("tcp", addr, &tls.Config{})
-		} else {
-			conn, err = net.Dial("tcp", addr)
-		}
-		if err != nil {
-			return nil, err
-		}
-		client, err := redis.NewClient(conn)
-
-		if err != nil {
-			return nil, err
+			opts = append(opts, radix.DialUseTLS(&tls.Config{}))
 		}
 		if auth != "" {
-			logger.Warnf("enabling authentication to redis on %s", url)
-			if err = client.Cmd("AUTH", auth).Err; err != nil {
-				client.Close()
-				return nil, err
-			}
+			opts = append(opts, radix.DialAuthPass(auth))
 		}
-		return client, nil
+
+		return radix.Dial(network, addr, opts...)
 	}
 
-	var opts []pool.Opt
-	if overflowPoolSize > 0 {
-		opts = append(opts, pool.OnFullBuffer(overflowPoolSize, overflowDrainPeriod))
-	}
-	if getTimeout > 0 {
-		opts = append(opts, pool.GetTimeout(getTimeout))
-	}
-	if maxNewConnPerSecond > 0 {
-		opts = append(opts, pool.CreateLimit(0, time.Second/time.Duration(maxNewConnPerSecond)))
+	opts := []radix.PoolOpt{
+		radix.PoolConnFunc(df),
+		// If the pool is empty, wait indefinitely for a new connection rather than
+		// creating a new connection or returning an error.
+		radix.PoolOnEmptyWait(),
+
+		// Every period, check if the pool is full. If not, add a connection.
+		radix.PoolRefillInterval(1 * time.Second),
+
+		// If the pool is full, close the connection (rather than using an overflow pool)
+		radix.PoolOnFullClose(),
+
+		// Flush the implicit pipeline periodically but don't limit the number of commands we pipeline
+		radix.PoolPipelineWindow(150*time.Microsecond, 0),
+
+		// Number of pipelines which may be ran at once defaults to poolSize.
+		radix.PoolPipelineConcurrency(poolSize),
 	}
 
-	pool, err := pool.NewCustom("tcp", url, poolSize, df, opts...)
+	// Enable debug traces of events on the pool
+	//opts = append(opts, radix.PoolWithTrace(trace.PoolTrace{
+	//// Pool has created a connection
+	//ConnCreated: func(created trace.PoolConnCreated) {},
+
+	//// Pool is about to close a connection
+	//ConnClosed: func(closed trace.PoolConnClosed) {},
+
+	//// Command is executed
+	//DoCompleted: func(do trace.PoolDoCompleted) {},
+
+	//// Pool has filled its connections
+	//InitCompleted: func(init trace.PoolInitCompleted) {},
+	//}))
+
+	pool, err := radix.NewPool("tcp", url, poolSize, opts...)
 	checkError(err)
 
 	return &poolImpl{
@@ -116,22 +112,15 @@ func NewPoolImpl(scope stats.Scope, useTls bool, auth string, url string, poolSi
 		stats: newPoolStats(scope)}
 }
 
-func (this *connectionImpl) PipeAppend(cmd string, args ...interface{}) {
-	this.client.PipeAppend(cmd, args...)
-	this.pending++
+func (this *connectionImpl) PipeAppend(cmd string, args ...string) (Response, error) {
+	var res uint32
+	err := this.pool.pool.Do(radix.Cmd(&res, cmd, args...))
+	if err != nil {
+		return nil, err
+	}
+	return &responseImpl{res}, nil
 }
 
-func (this *connectionImpl) PipeResponse() Response {
-	assert.Assert(this.pending > 0)
-	this.pending--
-
-	resp := this.client.PipeResp()
-	checkError(resp.Err)
-	return &responseImpl{resp}
-}
-
-func (this *responseImpl) Int() int64 {
-	i, err := this.response.Int64()
-	checkError(err)
-	return i
+func (this *responseImpl) Int() uint32 {
+	return this.response
 }

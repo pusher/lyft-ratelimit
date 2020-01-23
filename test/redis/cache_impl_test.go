@@ -1,6 +1,7 @@
 package redis_test
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/coocood/freecache"
@@ -46,8 +47,9 @@ func testRedis(usePerSecondRedis bool) func(*testing.T) {
 
 		if usePerSecondRedis {
 			perSecondPool.EXPECT().Get().Return(perSecondConnection)
+		} else {
+			pool.EXPECT().Get().Return(connection)
 		}
-		pool.EXPECT().Get().Return(connection)
 		timeSource.EXPECT().UnixNow().Return(int64(1234))
 		var connUsed *mock_redis.MockConnection
 		if usePerSecondRedis {
@@ -55,15 +57,14 @@ func testRedis(usePerSecondRedis bool) func(*testing.T) {
 		} else {
 			connUsed = connection
 		}
-		connUsed.EXPECT().PipeAppend("INCRBY", "domain_key_value_1234", uint32(1))
-		connUsed.EXPECT().PipeAppend("EXPIRE", "domain_key_value_1234", int64(1))
-		connUsed.EXPECT().PipeResponse().Return(response)
-		response.EXPECT().Int().Return(int64(5))
-		connUsed.EXPECT().PipeResponse()
+		connUsed.EXPECT().PipeAppend("INCRBY", "domain_key_value_1234", strconv.Itoa(1)).Return(response, nil)
+		response.EXPECT().Int().Return(uint32(5))
+		connUsed.EXPECT().PipeAppend("EXPIRE", "domain_key_value_1234", strconv.Itoa(1))
 		if usePerSecondRedis {
 			perSecondPool.EXPECT().Put(perSecondConnection)
+		} else {
+			pool.EXPECT().Put(connection)
 		}
-		pool.EXPECT().Put(connection)
 
 		request := common.NewRateLimitRequest("domain", [][][2]string{{{"key", "value"}}}, 1)
 		limits := []*config.RateLimit{config.NewRateLimit(10, pb.RateLimitResponse_RateLimit_SECOND, "key_value", statsStore)}
@@ -75,20 +76,13 @@ func testRedis(usePerSecondRedis bool) func(*testing.T) {
 		assert.Equal(uint64(0), limits[0].Stats.OverLimit.Value())
 		assert.Equal(uint64(0), limits[0].Stats.NearLimit.Value())
 
-		if usePerSecondRedis {
-			perSecondPool.EXPECT().Get().Return(perSecondConnection)
-		}
 		pool.EXPECT().Get().Return(connection)
 		timeSource.EXPECT().UnixNow().Return(int64(1234))
-		connection.EXPECT().PipeAppend("INCRBY", "domain_key2_value2_subkey2_subvalue2_1200", uint32(1))
+		connection.EXPECT().PipeAppend("INCRBY", "domain_key2_value2_subkey2_subvalue2_1200", strconv.Itoa(1)).Return(response, nil)
+		response.EXPECT().Int().Return(uint32(11))
 		connection.EXPECT().PipeAppend(
-			"EXPIRE", "domain_key2_value2_subkey2_subvalue2_1200", int64(60))
-		connection.EXPECT().PipeResponse().Return(response)
-		response.EXPECT().Int().Return(int64(11))
-		connection.EXPECT().PipeResponse()
-		if usePerSecondRedis {
-			perSecondPool.EXPECT().Put(perSecondConnection)
-		}
+			"EXPIRE", "domain_key2_value2_subkey2_subvalue2_1200", strconv.Itoa(60)).Return(response, nil)
+
 		pool.EXPECT().Put(connection)
 
 		request = common.NewRateLimitRequest(
@@ -108,26 +102,16 @@ func testRedis(usePerSecondRedis bool) func(*testing.T) {
 		assert.Equal(uint64(1), limits[1].Stats.OverLimit.Value())
 		assert.Equal(uint64(0), limits[1].Stats.NearLimit.Value())
 
-		if usePerSecondRedis {
-			perSecondPool.EXPECT().Get().Return(perSecondConnection)
-		}
 		pool.EXPECT().Get().Return(connection)
 		timeSource.EXPECT().UnixNow().Return(int64(1000000))
-		connection.EXPECT().PipeAppend("INCRBY", "domain_key3_value3_997200", uint32(1))
+		connection.EXPECT().PipeAppend("INCRBY", "domain_key3_value3_997200", strconv.Itoa(1)).Return(response, nil)
+		response.EXPECT().Int().Return(uint32(11))
 		connection.EXPECT().PipeAppend(
-			"EXPIRE", "domain_key3_value3_997200", int64(3600))
-		connection.EXPECT().PipeAppend("INCRBY", "domain_key3_value3_subkey3_subvalue3_950400", uint32(1))
+			"EXPIRE", "domain_key3_value3_997200", strconv.Itoa(3600))
+		connection.EXPECT().PipeAppend("INCRBY", "domain_key3_value3_subkey3_subvalue3_950400", strconv.Itoa(1)).Return(response, nil)
+		response.EXPECT().Int().Return(uint32(13))
 		connection.EXPECT().PipeAppend(
-			"EXPIRE", "domain_key3_value3_subkey3_subvalue3_950400", int64(86400))
-		connection.EXPECT().PipeResponse().Return(response)
-		response.EXPECT().Int().Return(int64(11))
-		connection.EXPECT().PipeResponse()
-		connection.EXPECT().PipeResponse().Return(response)
-		response.EXPECT().Int().Return(int64(13))
-		connection.EXPECT().PipeResponse()
-		if usePerSecondRedis {
-			perSecondPool.EXPECT().Put(perSecondConnection)
-		}
+			"EXPIRE", "domain_key3_value3_subkey3_subvalue3_950400", strconv.Itoa(86400))
 		pool.EXPECT().Put(connection)
 
 		request = common.NewRateLimitRequest(
@@ -209,12 +193,10 @@ func TestOverLimitWithLocalCache(t *testing.T) {
 	// Test Near Limit Stats. Under Near Limit Ratio
 	pool.EXPECT().Get().Return(connection)
 	timeSource.EXPECT().UnixNow().Return(int64(1000000))
-	connection.EXPECT().PipeAppend("INCRBY", "domain_key4_value4_997200", uint32(1))
+	connection.EXPECT().PipeAppend("INCRBY", "domain_key4_value4_997200", strconv.Itoa(1)).Return(response, nil)
+	response.EXPECT().Int().Return(uint32(11))
 	connection.EXPECT().PipeAppend(
-		"EXPIRE", "domain_key4_value4_997200", int64(3600))
-	connection.EXPECT().PipeResponse().Return(response)
-	response.EXPECT().Int().Return(int64(11))
-	connection.EXPECT().PipeResponse()
+		"EXPIRE", "domain_key4_value4_997200", strconv.Itoa(3600))
 	pool.EXPECT().Put(connection)
 
 	request := common.NewRateLimitRequest("domain", [][][2]string{{{"key4", "value4"}}}, 1)
@@ -237,12 +219,10 @@ func TestOverLimitWithLocalCache(t *testing.T) {
 	// Test Near Limit Stats. At Near Limit Ratio, still OK
 	pool.EXPECT().Get().Return(connection)
 	timeSource.EXPECT().UnixNow().Return(int64(1000000))
-	connection.EXPECT().PipeAppend("INCRBY", "domain_key4_value4_997200", uint32(1))
+	connection.EXPECT().PipeAppend("INCRBY", "domain_key4_value4_997200", strconv.Itoa(1)).Return(response, nil)
+	response.EXPECT().Int().Return(uint32(13))
 	connection.EXPECT().PipeAppend(
-		"EXPIRE", "domain_key4_value4_997200", int64(3600))
-	connection.EXPECT().PipeResponse().Return(response)
-	response.EXPECT().Int().Return(int64(13))
-	connection.EXPECT().PipeResponse()
+		"EXPIRE", "domain_key4_value4_997200", strconv.Itoa(3600))
 	pool.EXPECT().Put(connection)
 
 	assert.Equal(
@@ -260,12 +240,10 @@ func TestOverLimitWithLocalCache(t *testing.T) {
 	// Test Over limit stats
 	pool.EXPECT().Get().Return(connection)
 	timeSource.EXPECT().UnixNow().Return(int64(1000000))
-	connection.EXPECT().PipeAppend("INCRBY", "domain_key4_value4_997200", uint32(1))
+	connection.EXPECT().PipeAppend("INCRBY", "domain_key4_value4_997200", strconv.Itoa(1)).Return(response, nil)
+	response.EXPECT().Int().Return(uint32(16))
 	connection.EXPECT().PipeAppend(
-		"EXPIRE", "domain_key4_value4_997200", int64(3600))
-	connection.EXPECT().PipeResponse().Return(response)
-	response.EXPECT().Int().Return(int64(16))
-	connection.EXPECT().PipeResponse()
+		"EXPIRE", "domain_key4_value4_997200", strconv.Itoa(3600))
 	pool.EXPECT().Put(connection)
 
 	assert.Equal(
@@ -281,14 +259,7 @@ func TestOverLimitWithLocalCache(t *testing.T) {
 	testLocalCacheStats(localCacheStats, statsStore, sink, 0, 2, 3, 0, 1)
 
 	// Test Over limit stats with local cache
-	pool.EXPECT().Get().Return(connection)
 	timeSource.EXPECT().UnixNow().Return(int64(1000000))
-	connection.EXPECT().PipeAppend("INCRBY", "domain_key4_value4_997200", uint32(1)).Times(0)
-	connection.EXPECT().PipeAppend(
-		"EXPIRE", "domain_key4_value4_997200", int64(3600)).Times(0)
-	connection.EXPECT().PipeResponse().Times(0)
-	response.EXPECT().Int().Times(0)
-	pool.EXPECT().Put(connection)
 	assert.Equal(
 		[]*pb.RateLimitResponse_DescriptorStatus{
 			{Code: pb.RateLimitResponse_OVER_LIMIT, CurrentLimit: limits[0].Limit, LimitRemaining: 0}},
@@ -318,12 +289,10 @@ func TestNearLimit(t *testing.T) {
 	// Test Near Limit Stats. Under Near Limit Ratio
 	pool.EXPECT().Get().Return(connection)
 	timeSource.EXPECT().UnixNow().Return(int64(1000000))
-	connection.EXPECT().PipeAppend("INCRBY", "domain_key4_value4_997200", uint32(1))
+	connection.EXPECT().PipeAppend("INCRBY", "domain_key4_value4_997200", strconv.Itoa(1)).Return(response, nil)
+	response.EXPECT().Int().Return(uint32(11))
 	connection.EXPECT().PipeAppend(
-		"EXPIRE", "domain_key4_value4_997200", int64(3600))
-	connection.EXPECT().PipeResponse().Return(response)
-	response.EXPECT().Int().Return(int64(11))
-	connection.EXPECT().PipeResponse()
+		"EXPIRE", "domain_key4_value4_997200", strconv.Itoa(3600))
 	pool.EXPECT().Put(connection)
 
 	request := common.NewRateLimitRequest("domain", [][][2]string{{{"key4", "value4"}}}, 1)
@@ -342,12 +311,10 @@ func TestNearLimit(t *testing.T) {
 	// Test Near Limit Stats. At Near Limit Ratio, still OK
 	pool.EXPECT().Get().Return(connection)
 	timeSource.EXPECT().UnixNow().Return(int64(1000000))
-	connection.EXPECT().PipeAppend("INCRBY", "domain_key4_value4_997200", uint32(1))
+	connection.EXPECT().PipeAppend("INCRBY", "domain_key4_value4_997200", strconv.Itoa(1)).Return(response, nil)
+	response.EXPECT().Int().Return(uint32(13))
 	connection.EXPECT().PipeAppend(
-		"EXPIRE", "domain_key4_value4_997200", int64(3600))
-	connection.EXPECT().PipeResponse().Return(response)
-	response.EXPECT().Int().Return(int64(13))
-	connection.EXPECT().PipeResponse()
+		"EXPIRE", "domain_key4_value4_997200", strconv.Itoa(3600))
 	pool.EXPECT().Put(connection)
 
 	assert.Equal(
@@ -362,12 +329,10 @@ func TestNearLimit(t *testing.T) {
 	// when we are near limit, not after we have passed the limit.
 	pool.EXPECT().Get().Return(connection)
 	timeSource.EXPECT().UnixNow().Return(int64(1000000))
-	connection.EXPECT().PipeAppend("INCRBY", "domain_key4_value4_997200", uint32(1))
+	connection.EXPECT().PipeAppend("INCRBY", "domain_key4_value4_997200", strconv.Itoa(1)).Return(response, nil)
+	response.EXPECT().Int().Return(uint32(16))
 	connection.EXPECT().PipeAppend(
-		"EXPIRE", "domain_key4_value4_997200", int64(3600))
-	connection.EXPECT().PipeResponse().Return(response)
-	response.EXPECT().Int().Return(int64(16))
-	connection.EXPECT().PipeResponse()
+		"EXPIRE", "domain_key4_value4_997200", strconv.Itoa(3600))
 	pool.EXPECT().Put(connection)
 
 	assert.Equal(
@@ -382,11 +347,9 @@ func TestNearLimit(t *testing.T) {
 	// All of it under limit, under near limit
 	pool.EXPECT().Get().Return(connection)
 	timeSource.EXPECT().UnixNow().Return(int64(1234))
-	connection.EXPECT().PipeAppend("INCRBY", "domain_key5_value5_1234", uint32(3))
-	connection.EXPECT().PipeAppend("EXPIRE", "domain_key5_value5_1234", int64(1))
-	connection.EXPECT().PipeResponse().Return(response)
-	response.EXPECT().Int().Return(int64(5))
-	connection.EXPECT().PipeResponse()
+	connection.EXPECT().PipeAppend("INCRBY", "domain_key5_value5_1234", strconv.Itoa(3)).Return(response, nil)
+	response.EXPECT().Int().Return(uint32(5))
+	connection.EXPECT().PipeAppend("EXPIRE", "domain_key5_value5_1234", strconv.Itoa(1))
 	pool.EXPECT().Put(connection)
 
 	request = common.NewRateLimitRequest("domain", [][][2]string{{{"key5", "value5"}}}, 3)
@@ -402,11 +365,9 @@ func TestNearLimit(t *testing.T) {
 	// All of it under limit, some over near limit
 	pool.EXPECT().Get().Return(connection)
 	timeSource.EXPECT().UnixNow().Return(int64(1234))
-	connection.EXPECT().PipeAppend("INCRBY", "domain_key6_value6_1234", uint32(2))
-	connection.EXPECT().PipeAppend("EXPIRE", "domain_key6_value6_1234", int64(1))
-	connection.EXPECT().PipeResponse().Return(response)
-	response.EXPECT().Int().Return(int64(7))
-	connection.EXPECT().PipeResponse()
+	connection.EXPECT().PipeAppend("INCRBY", "domain_key6_value6_1234", strconv.Itoa(2)).Return(response, nil)
+	response.EXPECT().Int().Return(uint32(7))
+	connection.EXPECT().PipeAppend("EXPIRE", "domain_key6_value6_1234", strconv.Itoa(1))
 	pool.EXPECT().Put(connection)
 
 	request = common.NewRateLimitRequest("domain", [][][2]string{{{"key6", "value6"}}}, 2)
@@ -422,11 +383,9 @@ func TestNearLimit(t *testing.T) {
 	// All of it under limit, all of it over near limit
 	pool.EXPECT().Get().Return(connection)
 	timeSource.EXPECT().UnixNow().Return(int64(1234))
-	connection.EXPECT().PipeAppend("INCRBY", "domain_key7_value7_1234", uint32(3))
-	connection.EXPECT().PipeAppend("EXPIRE", "domain_key7_value7_1234", int64(1))
-	connection.EXPECT().PipeResponse().Return(response)
-	response.EXPECT().Int().Return(int64(19))
-	connection.EXPECT().PipeResponse()
+	connection.EXPECT().PipeAppend("INCRBY", "domain_key7_value7_1234", strconv.Itoa(3)).Return(response, nil)
+	response.EXPECT().Int().Return(uint32(19))
+	connection.EXPECT().PipeAppend("EXPIRE", "domain_key7_value7_1234", strconv.Itoa(1))
 	pool.EXPECT().Put(connection)
 
 	request = common.NewRateLimitRequest("domain", [][][2]string{{{"key7", "value7"}}}, 3)
@@ -442,11 +401,9 @@ func TestNearLimit(t *testing.T) {
 	// Some of it over limit, all of it over near limit
 	pool.EXPECT().Get().Return(connection)
 	timeSource.EXPECT().UnixNow().Return(int64(1234))
-	connection.EXPECT().PipeAppend("INCRBY", "domain_key8_value8_1234", uint32(3))
-	connection.EXPECT().PipeAppend("EXPIRE", "domain_key8_value8_1234", int64(1))
-	connection.EXPECT().PipeResponse().Return(response)
-	response.EXPECT().Int().Return(int64(22))
-	connection.EXPECT().PipeResponse()
+	connection.EXPECT().PipeAppend("INCRBY", "domain_key8_value8_1234", strconv.Itoa(3)).Return(response, nil)
+	response.EXPECT().Int().Return(uint32(22))
+	connection.EXPECT().PipeAppend("EXPIRE", "domain_key8_value8_1234", strconv.Itoa(1))
 	pool.EXPECT().Put(connection)
 
 	request = common.NewRateLimitRequest("domain", [][][2]string{{{"key8", "value8"}}}, 3)
@@ -462,11 +419,9 @@ func TestNearLimit(t *testing.T) {
 	// Some of it in all three places
 	pool.EXPECT().Get().Return(connection)
 	timeSource.EXPECT().UnixNow().Return(int64(1234))
-	connection.EXPECT().PipeAppend("INCRBY", "domain_key9_value9_1234", uint32(7))
-	connection.EXPECT().PipeAppend("EXPIRE", "domain_key9_value9_1234", int64(1))
-	connection.EXPECT().PipeResponse().Return(response)
-	response.EXPECT().Int().Return(int64(22))
-	connection.EXPECT().PipeResponse()
+	connection.EXPECT().PipeAppend("INCRBY", "domain_key9_value9_1234", strconv.Itoa(7)).Return(response, nil)
+	response.EXPECT().Int().Return(uint32(22))
+	connection.EXPECT().PipeAppend("EXPIRE", "domain_key9_value9_1234", strconv.Itoa(1))
 	pool.EXPECT().Put(connection)
 
 	request = common.NewRateLimitRequest("domain", [][][2]string{{{"key9", "value9"}}}, 7)
@@ -482,11 +437,9 @@ func TestNearLimit(t *testing.T) {
 	// all of it over limit
 	pool.EXPECT().Get().Return(connection)
 	timeSource.EXPECT().UnixNow().Return(int64(1234))
-	connection.EXPECT().PipeAppend("INCRBY", "domain_key10_value10_1234", uint32(3))
-	connection.EXPECT().PipeAppend("EXPIRE", "domain_key10_value10_1234", int64(1))
-	connection.EXPECT().PipeResponse().Return(response)
-	response.EXPECT().Int().Return(int64(30))
-	connection.EXPECT().PipeResponse()
+	connection.EXPECT().PipeAppend("INCRBY", "domain_key10_value10_1234", strconv.Itoa(3)).Return(response, nil)
+	response.EXPECT().Int().Return(uint32(30))
+	connection.EXPECT().PipeAppend("EXPIRE", "domain_key10_value10_1234", strconv.Itoa(1))
 	pool.EXPECT().Put(connection)
 
 	request = common.NewRateLimitRequest("domain", [][][2]string{{{"key10", "value10"}}}, 3)
@@ -517,11 +470,9 @@ func TestRedisWithJitter(t *testing.T) {
 	pool.EXPECT().Get().Return(connection)
 	timeSource.EXPECT().UnixNow().Return(int64(1234))
 	jitterSource.EXPECT().Int63().Return(int64(100))
-	connection.EXPECT().PipeAppend("INCRBY", "domain_key_value_1234", uint32(1))
-	connection.EXPECT().PipeAppend("EXPIRE", "domain_key_value_1234", int64(101))
-	connection.EXPECT().PipeResponse().Return(response)
-	response.EXPECT().Int().Return(int64(5))
-	connection.EXPECT().PipeResponse()
+	connection.EXPECT().PipeAppend("INCRBY", "domain_key_value_1234", strconv.Itoa(1)).Return(response, nil)
+	response.EXPECT().Int().Return(uint32(5))
+	connection.EXPECT().PipeAppend("EXPIRE", "domain_key_value_1234", strconv.Itoa(101))
 	pool.EXPECT().Put(connection)
 
 	request := common.NewRateLimitRequest("domain", [][][2]string{{{"key", "value"}}}, 1)

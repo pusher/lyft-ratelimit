@@ -5,7 +5,6 @@ go 1.13
 require (
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/coocood/freecache v1.1.0
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/envoyproxy/go-control-plane v0.6.9
 	github.com/gogo/protobuf v1.2.1 // indirect
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b // indirect
@@ -18,11 +17,11 @@ require (
 	github.com/lyft/gostats v0.2.6
 	github.com/lyft/protoc-gen-validate v0.0.7-0.20180626203901-f9d2b11e4414 // indirect
 	github.com/mediocregopher/radix.v2 v0.0.0-20180603022615-94360be26253
+	github.com/mediocregopher/radix/v3 v3.4.2
 	github.com/onsi/ginkgo v1.10.2 // indirect
 	github.com/onsi/gomega v1.7.0 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/sirupsen/logrus v1.0.4
-	github.com/stretchr/testify v1.1.3
+	github.com/stretchr/testify v1.2.2
 	golang.org/x/crypto v0.0.0-20170825220121-81e90905daef // indirect
 	golang.org/x/net v0.0.0-20180906233101-161cd47e91fd
 	google.golang.org/genproto v0.0.0-20180924164928-221a8d4f7494 // indirect
