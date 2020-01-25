@@ -126,16 +126,11 @@ func (this *rateLimitCacheImpl) DoLimit(
 
 	logger.Debugf("starting cache lookup")
 
-	conn := this.pool.Get()
-	defer this.pool.Put(conn)
+	var conn Connection = nil // lazy initialized
 
 	// Optional connection for per second limits. If the cache has a perSecondPool setup,
 	// then use a connection from the pool for per second limits.
-	var perSecondConn Connection = nil
-	if this.perSecondPool != nil {
-		perSecondConn = this.perSecondPool.Get()
-		defer this.perSecondPool.Put(perSecondConn)
-	}
+	var perSecondConn Connection = nil // lazy initialized
 
 	// request.HitsAddend could be 0 (default value) if not specified by the caller in the Ratelimit request.
 	hitsAddend := max(1, request.HitsAddend)
@@ -182,9 +177,19 @@ func (this *rateLimitCacheImpl) DoLimit(
 		}
 
 		// Use the perSecondConn if it is not nil and the cacheKey represents a per second Limit.
-		if perSecondConn != nil && cacheKey.perSecond {
+		if this.perSecondPool != nil && cacheKey.perSecond {
+			if perSecondConn == nil {
+				perSecondConn = this.perSecondPool.Get()
+				defer this.perSecondPool.Put(perSecondConn)
+			}
+
 			pipelineAppend(perSecondConn, cacheKey.key, hitsAddend, expirationSeconds)
 		} else {
+			if conn == nil {
+				conn = this.pool.Get()
+				defer this.pool.Put(conn)
+			}
+
 			pipelineAppend(conn, cacheKey.key, hitsAddend, expirationSeconds)
 		}
 	}

@@ -46,8 +46,9 @@ func testRedis(usePerSecondRedis bool) func(*testing.T) {
 
 		if usePerSecondRedis {
 			perSecondPool.EXPECT().Get().Return(perSecondConnection)
+		} else {
+			pool.EXPECT().Get().Return(connection)
 		}
-		pool.EXPECT().Get().Return(connection)
 		timeSource.EXPECT().UnixNow().Return(int64(1234))
 		var connUsed *mock_redis.MockConnection
 		if usePerSecondRedis {
@@ -62,8 +63,9 @@ func testRedis(usePerSecondRedis bool) func(*testing.T) {
 		connUsed.EXPECT().PipeResponse()
 		if usePerSecondRedis {
 			perSecondPool.EXPECT().Put(perSecondConnection)
+		} else {
+			pool.EXPECT().Put(connection)
 		}
-		pool.EXPECT().Put(connection)
 
 		request := common.NewRateLimitRequest("domain", [][][2]string{{{"key", "value"}}}, 1)
 		limits := []*config.RateLimit{config.NewRateLimit(10, pb.RateLimitResponse_RateLimit_SECOND, "key_value", statsStore)}
@@ -75,9 +77,6 @@ func testRedis(usePerSecondRedis bool) func(*testing.T) {
 		assert.Equal(uint64(0), limits[0].Stats.OverLimit.Value())
 		assert.Equal(uint64(0), limits[0].Stats.NearLimit.Value())
 
-		if usePerSecondRedis {
-			perSecondPool.EXPECT().Get().Return(perSecondConnection)
-		}
 		pool.EXPECT().Get().Return(connection)
 		timeSource.EXPECT().UnixNow().Return(int64(1234))
 		connection.EXPECT().PipeAppend("INCRBY", "domain_key2_value2_subkey2_subvalue2_1200", uint32(1))
@@ -86,9 +85,6 @@ func testRedis(usePerSecondRedis bool) func(*testing.T) {
 		connection.EXPECT().PipeResponse().Return(response)
 		response.EXPECT().Int().Return(int64(11))
 		connection.EXPECT().PipeResponse()
-		if usePerSecondRedis {
-			perSecondPool.EXPECT().Put(perSecondConnection)
-		}
 		pool.EXPECT().Put(connection)
 
 		request = common.NewRateLimitRequest(
@@ -108,9 +104,6 @@ func testRedis(usePerSecondRedis bool) func(*testing.T) {
 		assert.Equal(uint64(1), limits[1].Stats.OverLimit.Value())
 		assert.Equal(uint64(0), limits[1].Stats.NearLimit.Value())
 
-		if usePerSecondRedis {
-			perSecondPool.EXPECT().Get().Return(perSecondConnection)
-		}
 		pool.EXPECT().Get().Return(connection)
 		timeSource.EXPECT().UnixNow().Return(int64(1000000))
 		connection.EXPECT().PipeAppend("INCRBY", "domain_key3_value3_997200", uint32(1))
@@ -125,9 +118,6 @@ func testRedis(usePerSecondRedis bool) func(*testing.T) {
 		connection.EXPECT().PipeResponse().Return(response)
 		response.EXPECT().Int().Return(int64(13))
 		connection.EXPECT().PipeResponse()
-		if usePerSecondRedis {
-			perSecondPool.EXPECT().Put(perSecondConnection)
-		}
 		pool.EXPECT().Put(connection)
 
 		request = common.NewRateLimitRequest(
@@ -281,14 +271,7 @@ func TestOverLimitWithLocalCache(t *testing.T) {
 	testLocalCacheStats(localCacheStats, statsStore, sink, 0, 2, 3, 0, 1)
 
 	// Test Over limit stats with local cache
-	pool.EXPECT().Get().Return(connection)
 	timeSource.EXPECT().UnixNow().Return(int64(1000000))
-	connection.EXPECT().PipeAppend("INCRBY", "domain_key4_value4_997200", uint32(1)).Times(0)
-	connection.EXPECT().PipeAppend(
-		"EXPIRE", "domain_key4_value4_997200", int64(3600)).Times(0)
-	connection.EXPECT().PipeResponse().Times(0)
-	response.EXPECT().Int().Times(0)
-	pool.EXPECT().Put(connection)
 	assert.Equal(
 		[]*pb.RateLimitResponse_DescriptorStatus{
 			{Code: pb.RateLimitResponse_OVER_LIMIT, CurrentLimit: limits[0].Limit, LimitRemaining: 0}},
