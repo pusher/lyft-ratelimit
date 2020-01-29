@@ -83,7 +83,7 @@ func NewPoolImpl(scope stats.Scope, useTls bool, auth string, url string, poolSi
 		radix.PoolOnFullClose(),
 
 		// Flush the implicit pipeline periodically but don't limit the number of commands we pipeline
-		radix.PoolPipelineWindow(150*time.Microsecond, 0),
+		radix.PoolPipelineWindow(5*time.Millisecond, 0),
 
 		// Number of pipelines which may be ran at once defaults to poolSize.
 		radix.PoolPipelineConcurrency(poolSize),
