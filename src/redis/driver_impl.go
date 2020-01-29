@@ -53,7 +53,7 @@ func (this *poolImpl) Put(c Connection) {
 	this.stats.connectionActive.Dec()
 }
 
-func NewPoolImpl(scope stats.Scope, useTls bool, auth string, url string, poolSize int) Pool {
+func NewPoolImpl(scope stats.Scope, useTls bool, auth string, url string, poolSize int, poolPipelineWindowDuration time.Duration, poolPipelineWindowLimit int) Pool {
 	logger.Warnf("connecting to redis on %s with pool size %d", url, poolSize)
 	df := func(network, addr string) (radix.Conn, error) {
 		opts := []radix.DialOpt{
@@ -83,7 +83,7 @@ func NewPoolImpl(scope stats.Scope, useTls bool, auth string, url string, poolSi
 		radix.PoolOnFullClose(),
 
 		// Flush the implicit pipeline periodically but don't limit the number of commands we pipeline
-		radix.PoolPipelineWindow(5*time.Millisecond, 0),
+		radix.PoolPipelineWindow(poolPipelineWindowDuration, poolPipelineWindowLimit),
 
 		// Number of pipelines which may be ran at once defaults to poolSize.
 		radix.PoolPipelineConcurrency(poolSize),
