@@ -53,7 +53,7 @@ func (this *poolImpl) Put(c Connection) {
 	this.stats.connectionActive.Dec()
 }
 
-func NewPoolImpl(scope stats.Scope, useTls bool, auth string, url string, poolSize int, overflowPoolSize int, overflowDrainPeriod time.Duration, maxNewConnPerSecond int, getTimeout time.Duration) Pool {
+func NewPoolImpl(scope stats.Scope, useTls bool, auth string, url string, poolSize int) Pool {
 	logger.Warnf("connecting to redis on %s with pool size %d", url, poolSize)
 	df := func(network, addr string) (radix.Conn, error) {
 		opts := []radix.DialOpt{
