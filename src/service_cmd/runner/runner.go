@@ -2,9 +2,7 @@ package runner
 
 import (
 	"io"
-	"math/rand"
 	"net/http"
-	"time"
 
 	stats "github.com/lyft/gostats"
 
@@ -14,6 +12,7 @@ import (
 	pb_legacy "github.com/lyft/ratelimit/proto/ratelimit"
 
 	"github.com/lyft/ratelimit/src/config"
+	"github.com/lyft/ratelimit/src/noop"
 	"github.com/lyft/ratelimit/src/redis"
 	"github.com/lyft/ratelimit/src/server"
 	ratelimit "github.com/lyft/ratelimit/src/service"
@@ -49,24 +48,16 @@ func (runner *Runner) Run() {
 
 	srv := server.NewServer("ratelimit", runner.statsStore, localCache, settings.GrpcUnaryInterceptor(nil))
 
-	var perSecondPool redis.Pool
+	var _ redis.Pool
 	if s.RedisPerSecond {
-		perSecondPool = redis.NewPoolImpl(srv.Scope().Scope("redis_per_second_pool"), s.RedisPerSecondTls, s.RedisPerSecondAuth, s.RedisPerSecondUrl, s.RedisPerSecondPoolSize, s.RedisPoolOverflowSize, s.RedisPoolOverflowDrainPeriod, s.RedisPoolMaxNewConnPerSecond, s.RedisPoolGetTimeout)
+		_ = redis.NewPoolImpl(srv.Scope().Scope("redis_per_second_pool"), s.RedisPerSecondTls, s.RedisPerSecondAuth, s.RedisPerSecondUrl, s.RedisPerSecondPoolSize, s.RedisPoolOverflowSize, s.RedisPoolOverflowDrainPeriod, s.RedisPoolMaxNewConnPerSecond, s.RedisPoolGetTimeout)
 	}
-	var otherPool redis.Pool
-	otherPool = redis.NewPoolImpl(srv.Scope().Scope("redis_pool"), s.RedisTls, s.RedisAuth, s.RedisUrl, s.RedisPoolSize, s.RedisPoolOverflowSize, s.RedisPoolOverflowDrainPeriod, s.RedisPoolMaxNewConnPerSecond, s.RedisPoolGetTimeout)
+	var _ redis.Pool
+	_ = redis.NewPoolImpl(srv.Scope().Scope("redis_pool"), s.RedisTls, s.RedisAuth, s.RedisUrl, s.RedisPoolSize, s.RedisPoolOverflowSize, s.RedisPoolOverflowDrainPeriod, s.RedisPoolMaxNewConnPerSecond, s.RedisPoolGetTimeout)
 
 	service := ratelimit.NewService(
 		srv.Runtime(),
-		redis.NewRateLimitCacheImpl(
-			otherPool,
-			perSecondPool,
-			redis.NewTimeSourceImpl(),
-			rand.New(redis.NewLockedSource(time.Now().Unix())),
-			s.ExpirationJitterMaxSeconds,
-			localCache,
-			srv.Scope().Scope("cache"),
-		),
+		noop.Noop{},
 		config.NewRateLimitConfigLoaderImpl(),
 		srv.Scope().Scope("service"))
 
