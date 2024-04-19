@@ -23,8 +23,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/sirupsen/logrus v1.0.4
 	github.com/stretchr/testify v1.1.3
-	golang.org/x/crypto v0.0.0-20170825220121-81e90905daef // indirect
-	golang.org/x/net v0.0.0-20180906233101-161cd47e91fd
+	golang.org/x/net v0.23.0
 	google.golang.org/genproto v0.0.0-20180924164928-221a8d4f7494 // indirect
 	google.golang.org/grpc v1.12.0
 	gopkg.in/airbrake/gobrake.v2 v2.0.9 // indirect
